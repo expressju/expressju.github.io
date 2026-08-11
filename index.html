@@ -274,6 +274,9 @@ textarea{resize:vertical;min-height:90px;line-height:1.6;font-size:13px}
 .info b{color:#0F4739}
 .warnbar{background:#FFF6E8;border:1px solid #F0D9A8;color:#8A6412;border-radius:12px;
   padding:11px 14px;font-size:12.5px;line-height:1.6;margin-bottom:12px}
+.warnbar.err{background:#FFF2EF;border:2px solid #E8A08C;color:#9C3418;font-size:13px;padding:13px 16px}
+.warnbar.err b{color:#7C240E}
+.warnbar code{background:#fff;border:1px solid #E8D6CF;border-radius:5px;padding:1px 5px;font-size:12px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(80px);background:var(--ink);
   color:#fff;padding:11px 20px;border-radius:11px;font-size:13.5px;font-weight:700;opacity:0;
   transition:all .28s cubic-bezier(.2,1.2,.4,1);z-index:99;pointer-events:none}
@@ -1267,16 +1270,43 @@ function applyData(d){
 }
 function boot(d){ applyData(d); buildGroupChips(); buildLeafChips(); refresh(); }
 
-fetch("restaurants.json",{cache:"no-store"})
-  .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-  .then(boot)
-  .catch(function(){
-    boot(FALLBACK);
-    var d=document.createElement("div"); d.className="warnbar";
-    d.innerHTML="⚠️ <b>restaurants.json 을 불러오지 못했습니다.</b> 내장 최소 목록으로만 동작합니다. "+
-      "두 파일을 같은 폴더에 두고 웹서버(GitHub Pages 등)로 여세요.";
-    document.querySelector(".wrap").insertBefore(d, document.querySelector("header").nextSibling);
-  });
+function loadDb(){
+  var old=document.querySelector(".warnbar"); if(old) old.remove();
+  return fetch("restaurants.json",{cache:"no-store"})
+    .then(function(r){ if(!r.ok) throw {k:"http",s:r.status}; return r.text(); })
+    .then(function(t){ var d; try{ d=JSON.parse(t); }catch(e){ throw {k:"json"}; }
+      var list=Array.isArray(d)?d:(d&&d.restaurants);
+      if(!Array.isArray(list)||!list.length) throw {k:"empty"};
+      return d; })
+    .then(boot)
+    .catch(function(err){
+      boot(FALLBACK);
+      var why, how;
+      if(location.protocol==="file:"){
+        why="index.html 파일을 더블클릭해서 열었습니다.";
+        how="브라우저 보안 정책상 이 방식으로는 옆 파일을 읽을 수 없습니다. <b>GitHub Pages 주소로 접속</b>하세요.";
+      }else if(err&&err.k==="http"&&err.s===404){
+        why="서버에 <code>restaurants.json</code> 파일이 없습니다. (404)";
+        how="GitHub 저장소에서 <b>index.html 과 같은 위치</b>에 <code>restaurants.json</code>을 올렸는지 확인하세요. 방금 올렸다면 1~2분 뒤 새로고침해 보세요.";
+      }else if(err&&err.k==="json"){
+        why="restaurants.json 내용이 올바른 JSON이 아닙니다.";
+        how="파일이 잘려서 올라갔을 수 있습니다. 다시 받아 올려주세요.";
+      }else if(err&&err.k==="empty"){
+        why="restaurants.json 에 식당 목록이 비어 있습니다.";
+        how="받으신 원본 파일을 다시 올려주세요.";
+      }else{
+        why="restaurants.json 을 읽는 중 오류가 발생했습니다."+(err&&err.s?" (HTTP "+err.s+")":"");
+        how="새로고침하거나 잠시 후 다시 시도해 주세요.";
+      }
+      var d=document.createElement("div"); d.className="warnbar err";
+      d.innerHTML="🚨 <b>식당 DB를 불러오지 못했습니다 — 지금은 내장 10곳으로만 돌아갑니다.</b><br>"+
+        "원인: "+why+"<br>해결: "+how+
+        ' <button class="reset-btn" id="dbRetry" style="margin-left:6px">다시 시도</button>';
+      document.querySelector(".wrap").insertBefore(d, document.querySelector("header").nextSibling);
+      document.getElementById("dbRetry").addEventListener("click", loadDb);
+    });
+}
+loadDb();
 
 })();
 </script>
